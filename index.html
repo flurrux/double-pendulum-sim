@@ -1,0 +1,336 @@
+﻿<html>
+	<head>
+		<style>
+			html, body {
+				width: 100%;
+				height: 100%;
+			}
+			body {
+				margin: 0px; 
+				padding: 0px;
+				overflow: hidden;
+			}
+			#interface {
+				position: absolute; 
+				bottom: 0px; left: 0px; right: 0px;
+				color: white;
+				font-size: 34px;
+				display: flex;
+				padding: 10px;
+			}
+			#play-button {
+				cursor: pointer;
+				font-size: 40px;
+			}
+		</style>
+	</head>
+	<body>
+		<canvas></canvas>
+		<div id="interface">
+			<div id="play-button">
+				<span>
+					<!--&#9209;-->
+					&#9205;
+				</span>
+			</div>
+			<div style="flex: 1;"></div>
+			<div id="energy-error-box">
+				<span>energy deviation: </span>
+				<span id="energy-error"></span>
+			</div>
+		</div>
+
+		<!-- vector2, matrix -->
+		<script>
+			var Vec2 = {
+				add: (a, b) => [a[0] + b[0], a[1] + b[1]],
+				subtract: (a, b) => [a[0] - b[0], a[1] - b[1]],
+				multiply: (v, s) => [v[0] * s, v[1] * s],
+				divide: (v, d) => [v[0] / d, v[1] / d],
+				magnitude: (v) => Math.sqrt(v[0]**2 + v[1]**2),
+				dot: (a, b) => a[0] * b[0] + a[1] * b[1],
+				normalize: (v) => Vec2.divide(v, Vec2.magnitude(v)),
+				orthogonal: (v) => [-v[1], v[0]],
+				distance: (a, b) => Vec2.magnitude(Vec2.subtract(b, a))
+			};
+			var Mat2x2 = {
+				orthoNormalInverse: (m) => [m[0], -m[1], -m[2], m[3]],
+				multiplyVector: (m, v) => [
+					m[0] * v[0] + m[2] * v[1],
+					m[1] * v[0] + m[3] * v[1]
+				]
+			}
+		</script>
+
+		<!-- setup canvas -->
+		<script>
+			const canvas = document.querySelector("canvas");
+			const fitCanvasToWindow = () => {
+				const [w, h] = [window.innerWidth, window.innerHeight];
+				const s = window.devicePixelRatio;
+				Object.assign(
+					canvas.style,
+					{
+						width: w + "px",
+						height: h + "px"
+					}
+				);
+				Object.assign(
+					canvas, 
+					{
+						width: w * s,
+						height: h * s
+					}
+				);
+
+				ctx.resetTransform();
+				ctx.scale(s, s);
+			};
+			window.onresize = () => {
+				fitCanvasToWindow();
+				render();
+			};
+			const ctx = canvas.getContext("2d");
+			fitCanvasToWindow();
+		</script>
+
+		<!-- util -->
+		<script>
+			function startLoop(callback) {
+				let prevTime = Date.now();
+				const loop = () => {
+					const curTime = Date.now();
+					const dt = (curTime - prevTime) / 1000;
+					prevTime = curTime;
+					requestAnimationFrame(loop);
+					callback(dt);
+				};
+				loop();
+			}
+			function createArray(length){
+				const array = [];
+				for (let i = 0; i < length; i++){
+					array[i] = i;
+				}
+				return array;
+			}
+			function drawDisc(point, radius){
+				ctx.beginPath();
+				ctx.arc(point[0], point[1], radius, 0, Math.PI * 2);
+				ctx.fill();
+			}
+			function drawPolyline(points) {
+				ctx.beginPath();
+				ctx.moveTo(...points[0]);
+				for (let i = 1; i < points.length; i++){
+					ctx.lineTo(...points[i]);
+				}
+				ctx.stroke();
+			}
+			function randomMin1ToPlus1() {
+				return Math.random() * 2 - 1;
+			}
+		</script>
+
+		<!-- app -->
+		<script>
+
+			//state = [angle1, angle1Velocity, angle2, angle2Velocity]
+			function calculateNextPendulumStateByLagrangian(state, gravityForce, dt){
+				const [angle1, angleVelocity1, angle2, angleVelocity2] = state;
+				const lagrangianAngle1Derivative = gravityForce * (2 * Math.sin(angle1) + Math.sin(angle1 + angle2));
+				const lagrangianAngle2Derivative = -(angleVelocity1 + angleVelocity2) * angleVelocity1 * Math.sin(angle2) + gravityForce * Math.sin(angle1 + angle2)
+				const p = 1 + Math.cos(angle2);
+				const pDot = angleVelocity2 * -Math.sin(angle2);
+				const d3 = 1 + 2 * p;
+				const d4 = (2 * angleVelocity1 + angleVelocity2) * pDot;
+				const d5 = angleVelocity1 * pDot;
+				const d1 = lagrangianAngle1Derivative - d4;
+				const d2 = lagrangianAngle2Derivative - d5;
+				const acc1 = (d2 * p - d1) / (p ** 2 - d3);
+				const acc2 = d2 - acc1 * p;
+
+				return [
+					angle1 + angleVelocity1 * dt,
+					angleVelocity1 + acc1 * dt,
+					angle2 + angleVelocity2 * dt,
+					angleVelocity2 + acc2 * dt
+				];
+			}
+			function calculateNextPendulumStateByRubberBands(state, gravityForce, dt){}
+			function calculatePendulumEnergy(state, gravityForce){
+				const [angle1, angleVelocity1, angle2, angleVelocity2] = state;
+				const kineticEnergy = angleVelocity1 ** 2 + 0.5 * (angleVelocity1 + angleVelocity2) ** 2 + (angleVelocity1 + angleVelocity2) * angleVelocity1 * Math.cos(angle2);
+				const potentialEnergy = gravityForce * (2 * Math.cos(angle1) + Math.cos(angle1 + angle2));
+				return kineticEnergy + potentialEnergy;
+			}
+
+
+			const gravityForce = -1;
+			let pendulumState = [
+				0.3, 0, 0.6, 0
+			];
+			const calculatePendulumPoints = () => {
+				const angle1 = pendulumState[0];
+				const angle2 = pendulumState[2];
+				const point1 = [
+					Math.sin(angle1),
+					Math.cos(angle1)
+				];
+				const point2 = [
+					point1[0] + Math.sin(angle1 + angle2),
+					point1[1] + Math.cos(angle1 + angle2)
+				];
+				return [point1, point2];
+			};
+			function renderPendulum(){
+				const [point1, point2] = calculatePendulumPoints();
+
+				Object.assign(ctx, {
+					lineWidth: 0.018,
+					strokeStyle: "white",
+					fillStyle: "#dae1f0"
+				});
+				drawPolyline([
+					[0, 0], point1, point2
+				]);
+				drawDisc([0, 0], 0.05);
+				drawDisc(point1, 0.07);
+				drawDisc(point2, 0.07);
+			}
+			function updatePendulum(dt){
+				pendulumState = calculateNextPendulumStateByLagrangian(pendulumState, gravityForce, dt);
+			}
+
+
+			//app-state ###
+
+			let appState = "paused";
+			const setAppState = (newAppState) => {
+				appState = newAppState;
+				document.querySelector("#play-button span").innerHTML = appState === "running" ? "&#9209;" : "&#11208;";
+			};
+			function toggleAppState(){
+				setAppState(appState === "running" ? "paused" : "running");
+			}
+			document.querySelector("#play-button").onclick = toggleAppState;
+			document.addEventListener(
+				"keydown", 
+				ev => {
+					if (ev.key === " ") toggleAppState();
+				}
+			);
+			setAppState("paused");
+
+			//dragging ###
+			{
+				const calculateLocalPoint = e => {
+					const screenPoint = [e.clientX, e.clientY];
+					const localPoint = [
+						(screenPoint[0] - ctxTransform[4]) / canvasScale,
+						(screenPoint[1] - ctxTransform[5]) / canvasScale
+					];
+					return localPoint;
+				};
+				let draggingEndPoint = false;
+				canvas.addEventListener("pointerdown", e => {
+					if (appState === "running") return;
+					const localPoint = calculateLocalPoint(e);
+					const endPoint = calculatePendulumPoints()[1];
+					const dst = Vec2.distance(localPoint, endPoint);
+					if (dst < 0.07){
+						draggingEndPoint = true;
+					}
+				});
+				document.addEventListener("pointerup", () => {
+					if (!draggingEndPoint) return;
+					resetEnergyError();
+					draggingEndPoint = false;
+				});
+				const calculateAngle = (point) => {
+					const point_n = Vec2.normalize(point);
+					const angle = Math.acos(point_n[1]);
+					return angle * Math.sign(point_n[0] || 1);
+				};
+				document.addEventListener("pointermove", e => {
+					if (!draggingEndPoint) return;
+					const localPoint = calculateLocalPoint(e);
+					const d = Math.min(1.9999, Vec2.magnitude(localPoint));
+					const h = Math.sqrt(1 - 0.25 * d**2) * Math.sign(pendulumState[2]);
+					const a1 = calculateAngle(localPoint);
+					const a2 = calculateAngle([h, d / 2]);
+					const angle1 = a1 - a2;
+					const angle2 = 2 * a2;
+					pendulumState = [
+						angle1, 0,
+						angle2, 0
+					];
+					prepareAndRender();
+				});
+			}
+
+			//energy-error ###
+			const calculateCurrentPendulumEnergy = () => {
+				return calculatePendulumEnergy(pendulumState, gravityForce);
+			};
+			let initialEnergy = calculateCurrentPendulumEnergy();
+			const updateEnergyError = () => {
+				const curEnergy = calculateCurrentPendulumEnergy();
+				const energyError = (curEnergy - initialEnergy);
+				document.querySelector("#energy-error").innerHTML = energyError.toExponential(1);
+			};
+			const resetEnergyError = () => {
+				initialEnergy = calculateCurrentPendulumEnergy();
+				updateEnergyError();
+			};
+			updateEnergyError();
+
+
+			//pendulum ###
+			let simulationSteps = 100;
+			const stepPendulumSimulation = (dt) => {
+				dt *= 3;
+				const iterations = simulationSteps;
+				dt = dt / iterations;
+				for (let i = 0; i < iterations; i++) {
+					updatePendulum(dt);
+				}
+			};
+
+
+			const canvasScale = 200;
+			const ctxTransform = [canvasScale, 0, 0, canvasScale, canvas.width * 0.5, canvas.height * 0.4];
+			function prepareAndRender() {
+				const [w, h] = [canvas.width, canvas.height];
+
+				ctx.clearRect(0, 0, w, h);
+				ctx.save();
+				ctx.fillStyle = "#1c1211";
+				ctx.fillRect(0, 0, w, h);
+				ctx.transform(...ctxTransform);
+
+				render();
+
+				ctx.restore();
+			}
+			
+			function render() {
+				renderPendulum();
+			};
+			
+			function update(dt){
+				stepPendulumSimulation(dt);
+				updateEnergyError();
+			}
+			function updateAndRender(dt){
+				if (appState !== "running") return;
+				update(dt);
+				prepareAndRender();
+			}
+
+			prepareAndRender();
+			startLoop(updateAndRender);
+
+		</script>	
+	</body>
+</html>
