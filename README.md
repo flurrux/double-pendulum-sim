@@ -3,7 +3,7 @@
 
 https://double-pendulum-sim.netlify.app/
 
-<img src="double-pendulum.gif" style="width: 600px;" />
+<img src="double-pendulum.gif" style="width: 500px;" />
 
 (press `space` to pause/resume the simuation)  
 
