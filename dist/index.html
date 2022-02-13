@@ -14,8 +14,9 @@
 				position: absolute; 
 				bottom: 0px; left: 0px; right: 0px;
 				color: white;
-				font-size: 34px;
+				font-size: 24px;
 				display: flex;
+				align-items: center;
 				padding: 10px;
 			}
 			#play-button {
@@ -298,10 +299,13 @@
 			};
 
 
-			const canvasScale = 200;
-			const ctxTransform = [canvasScale, 0, 0, canvasScale, canvas.width * 0.5, canvas.height * 0.4];
+			const canvasScale = 130;
+			const ctxTransform = [
+				canvasScale, 0, 0, canvasScale, 
+				canvas.clientWidth * 0.5, canvas.clientHeight * 0.4
+			];
 			function prepareAndRender() {
-				const [w, h] = [canvas.width, canvas.height];
+				const [w, h] = [canvas.clientWidth, canvas.clientHeight];
 
 				ctx.clearRect(0, 0, w, h);
 				ctx.save();
